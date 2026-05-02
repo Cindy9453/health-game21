@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>健康戰士 100 關：終極對決</title>
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    background-image: radial-gradient(circle, #2c3e50, #000);
+    color: white;
+    font-family: '微軟正黑體', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* 頂部血條 */
+  #ui {
+    position: absolute;
+    top: 30px;
+    width: 100%;
+    display: flex;
+    justify-content: space-around;
+    z-index: 100;
+  }
+
+  .bar-wrapper { width: 40%; text-align: center; }
+  .name-tag { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #ffcc00; text-shadow: 2px 2px 4px #000; }
+  .bar { height: 35px; background: #222; border: 4px solid #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+  .hp { height: 100%; width: 100%; transition: width 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
+  #heroHP { background: linear-gradient(to right, #00ff88, #008855); }
+  #monsterHP { background: linear-gradient(to right, #ff4444, #880000); }
+
+  /* 戰鬥區：只有兩隻！ */
+  #arena {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 100px;
+    box-sizing: border-box;
+  }
+
+  /* 角色巨大化 */
+  .character {
+    width: 550px; /* 超大尺寸 */
+    height: 550px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    image-rendering: pixelated;
+    transition: transform 0.1s;
+  }
+
+  #hero {
+    background-image: url('https://raw.githubusercontent.com/chriscourses/fighting-game/main/img/samuraiMack/Idle.png');
+  }
+
+  #monster {
+    background-image: url('https://raw.githubusercontent.com/chriscourses/fighting-game/main/img/kenji/Idle.png');
+    transform: scaleX(-1); /* 鏡像 */
+  }
+
+  /* 噴血/受擊閃爍 */
+  .hit-flash { filter: brightness(3) sepia(1) saturate(10) hue-rotate(-50deg) !important; }
+
+  /* 子彈 */
+  .bullet {
+    width: 40px;
+    height: 10px;
+    background: #fff;
+    position: absolute;
+    border-radius: 5px;
+    box-shadow: 0 0 20px #fff, 0 0 40px #ff00ff;
+    z-index: 50;
+  }
+
+  /* 題目區 */
+  #questionContainer {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    border-top: 5px solid #ffcc00;
+    padding: 30px;
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  #question { font-size: 28px; margin-bottom: 20px; color: #fff; }
+  .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 800px; margin: 0 auto; }
+  
+  button {
+    padding: 15px;
+    font-size: 20px;
+    cursor: pointer;
+    background: #333;
+    color: white;
+    border: 2px solid #666;
+    border-radius: 10px;
+    transition: all 0.2s;
+  }
+
+  button:hover { background: #ffcc00; color: #000; border-color: #fff; transform: scale(1.02); }
+
+  #startNotice {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
+    justify-content: center; align-items: center; z-index: 999;
+  }
+</style>
+</head>
+<body>
+
+<div id="startNotice">
+  <h1>健康大考驗：100題生存戰</h1>
+  <button onclick="startGame()" style="padding: 20px 50px; font-size: 30px;">點擊開始遊戲 (啟動音樂)</button>
+</div>
+
+<audio id="bgm" src="https://cdn.pixabay.com/audio/2024/04/12/audio_104f76231c.mp3" loop></audio>
+<audio id="shootSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_49b1d9.mp3"></audio>
+<audio id="hitSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_c6ccf4.mp3"></audio>
+
+<div id="ui">
+  <div class="bar-wrapper">
+    <div class="name-tag">健康英雄</div>
+    <div class="bar"><div id="heroHP" class="hp"></div></div>
+  </div>
+  <div class="bar-wrapper">
+    <div class="name-tag">疾病魔王</div>
+    <div class="bar"><div id="monsterHP" class="hp"></div></div>
+  </div>
+</div>
+
+<div id="arena">
+  <div id="hero" class="character"></div>
+  <div id="monster" class="character"></div>
+</div>
+
+<div id="questionContainer">
+  <div id="question">準備中...</div>
+  <div id="choices" class="btn-group"></div>
+</div>
+
+<script>
+let hHP = 100, mHP = 100;
+let questionBank = [];
+let currentIndex = 0;
+
+// 1. 生成 100 題完全不同的題目
+function generateQuestions() {
+  const types = [
+    { title: "關於營養：", good: ["多吃蔬菜", "喝足夠的水", "吃天然原型食物", "補充維生素D", "攝取優質蛋白"], bad: ["常喝含糖飲料", "吃加工肉品", "天天吃油炸物", "節食不吃澱粉", "攝取過多反式脂肪"] },
+    { title: "關於生活習慣：", good: ["每天睡足7小時", "飯後散步", "定時運動", "睡前不看手機", "保持心情愉快"], bad: ["長期熬夜", "久坐不動", "抽菸酗酒", "過度使用3C", "不吃早餐"] },
+    { title: "關於身體警訊：", good: ["定期健康檢查", "注意體重變化", "觀察排便習慣", "保持牙齒清潔", "有病痛即就醫"], bad: ["亂吃止痛藥", "無視長期疲勞", "信偏方不就醫", "不愛曬太陽", "過度勞累"] }
+  ];
+
+  for (let i = 1; i <= 100; i++) {
+    const type = types[Math.floor(Math.random() * types.length)];
+    const isGoodQ = Math.random() > 0.5;
+    const correct = isGoodQ ? type.good[Math.floor(Math.random() * 5)] : type.bad[Math.floor(Math.random() * 5)];
+    
+    // 隨機選三個錯誤答案
+    let wrongs = [];
+    const pool = isGoodQ ? type.bad : type.good;
+    wrongs = [...pool].sort(() => 0.5 - Math.random()).slice(0, 3);
+
+    const allOptions = [correct, ...wrongs].sort(() => 0.5 - Math.random());
+    
+    questionBank.push({
+      q: `第 ${i} 題 | ${type.title} 下列哪項行為「${isGoodQ ? '最健康' : '最不健康'}」？`,
+      options: allOptions,
+      answer: allOptions.indexOf(correct)
+    });
+  }
+}
+
+// 2. 遊戲控制
+function startGame() {
+  document.getElementById("startNotice").style.display = "none";
+  const bgm = document.getElementById("bgm");
+  bgm.volume = 0.8; // 調大背景音樂
+  bgm.play();
+  loadQuestion();
+}
+
+function loadQuestion() {
+  if (currentIndex >= 100) {
+    alert("你完成了 100 題挑戰！你是真正的健康之王！");
+    location.reload();
+    return;
+  }
+
+  const data = questionBank[currentIndex];
+  document.getElementById("question").innerText = data.q;
+  const choicesDiv = document.getElementById("choices");
+  choicesDiv.innerHTML = "";
+
+  data.options.forEach((opt, i) => {
+    const btn = document.createElement("button");
+    btn.innerText = opt;
+    btn.onclick = () => handleAnswer(i === data.answer);
+    choicesDiv.appendChild(btn);
+  });
+}
+
+function handleAnswer(isCorrect) {
+  if (isCorrect) {
+    fire(true);
+  } else {
+    fire(false);
+  }
+  currentIndex++;
+  setTimeout(loadQuestion, 800);
+}
+
+function fire(isHero) {
+  document.getElementById("shootSound").play();
+  const bullet = document.createElement("div");
+  bullet.className = "bullet";
+  document.body.appendChild(bullet);
+
+  const heroEl = document.getElementById("hero");
+  const monsterEl = document.getElementById("monster");
+  
+  let startX = isHero ? 400 : window.innerWidth - 400;
+  let startY = window.innerHeight / 2;
+  bullet.style.left = startX + "px";
+  bullet.style.top = startY + "px";
+
+  let x = startX;
+  const move = setInterval(() => {
+    x += isHero ? 30 : -30;
+    bullet.style.left = x + "px";
+
+    // 碰撞偵測
+    if (x > window.innerWidth - 400 || x < 400) {
+      clearInterval(move);
+      bullet.remove();
+      document.getElementById("hitSound").play();
+      
+      if (isHero) {
+        mHP -= 10;
+        monsterEl.classList.add("hit-flash");
+        setTimeout(() => monsterEl.classList.remove("hit-flash"), 150);
+      } else {
+        hHP -= 20;
+        heroEl.classList.add("hit-flash");
+        setTimeout(() => heroEl.classList.remove("hit-flash"), 150);
+      }
+      
+      updateUI();
+    }
+  }, 20);
+}
+
+function updateUI() {
+  document.getElementById("heroHP").style.width = hHP + "%";
+  document.getElementById("monsterHP").style.width = mHP + "%";
+
+  if (hHP <= 0) { alert("挑戰失敗！健康需要持之以恆。"); location.reload(); }
+  if (mHP <= 0) { 
+    alert("擊敗了病魔！繼續挑戰下一關！"); 
+    mHP = 100; // 重置怪物血量繼續答題
+    updateUI();
+  }
+}
+
+// 初始化題目
+generateQuestions();
+</script>
+
+</body>
+</html>
